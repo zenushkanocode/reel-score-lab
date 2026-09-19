@@ -22,9 +22,9 @@
   }
 
   function barTone(pct, index) {
-    // Roman pattern: most black, a couple orange accents
+    // Roman pattern: black primary bars, orange accents on Story + Visual (or low scores)
     if (index === 1 || index === 3) return "orange";
-    if (pct < 40) return "orange";
+    if (pct < 35) return "orange";
     return "black";
   }
 
@@ -99,11 +99,25 @@
   }
 
   function renderBest() {
-    const top = data
+    // Prefer unique accounts for the strip (Roman shows distinct faces)
+    const scored = data
       .filter((d) => d.scored)
       .slice()
-      .sort((a, b) => b.overall_pct - a.overall_pct)
-      .slice(0, 6);
+      .sort((a, b) => b.overall_pct - a.overall_pct);
+    const top = [];
+    const seen = new Set();
+    for (const d of scored) {
+      if (seen.has(d.account)) continue;
+      seen.add(d.account);
+      top.push(d);
+      if (top.length >= 6) break;
+    }
+    // fill remaining slots if <6 unique accounts
+    for (const d of scored) {
+      if (top.length >= 6) break;
+      if (top.includes(d)) continue;
+      top.push(d);
+    }
     $("best-row").innerHTML = top
       .map((d) => {
         const idx = data.indexOf(d);
