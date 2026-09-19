@@ -19,6 +19,10 @@
   let scannedCount = 0;
   let scanning = true;
   let kpiTargets = {};
+  let recentPickAccounts = []; // last few accounts shown (cycle/scan diversity)
+  const BEST_STRIP_COUNT = 10;
+  const MAX_PER_ACCOUNT_BEST = 1;
+  const SKIP_SAME_ACCOUNT_WINDOW = 2;
 
   const $ = (id) => document.getElementById(id);
 
@@ -150,11 +154,31 @@
   }
 
   function renderBest() {
+    // Top by hook_score, max 1 per account — ~8–12 diverse creators
     const scored = data
-      .filter((d) => d.scored)
+      .filter((d) => d.scored && d.hook_score != null)
       .slice()
-      .sort((a, b) => (b.overall_pct || 0) - (a.overall_pct || 0));
-    const top = scored.slice(0, 6);
+      .sort((a, b) => (b.hook_score || 0) - (a.hook_score || 0));
+    const top = [];
+    const perAccount = new Map();
+    for (const d of scored) {
+      const n = perAccount.get(d.account) || 0;
+      if (n >= MAX_PER_ACCOUNT_BEST) continue;
+      perAccount.set(d.account, n + 1);
+      top.push(d);
+      if (top.length >= BEST_STRIP_COUNT) break;
+    }
+    // If still short, allow a 2nd reel per account (still hook-ranked)
+    if (top.length < BEST_STRIP_COUNT) {
+      for (const d of scored) {
+        if (top.includes(d)) continue;
+        const n = perAccount.get(d.account) || 0;
+        if (n >= 2) continue;
+        perAccount.set(d.account, n + 1);
+        top.push(d);
+        if (top.length >= BEST_STRIP_COUNT) break;
+      }
+    }
     $("best-row").innerHTML = top
       .map((d) => {
         const idx = data.indexOf(d);
@@ -177,6 +201,12 @@
   function select(i, animateBars) {
     selected = i;
     const d = data[i];
+    if (d && d.account) {
+      recentPickAccounts.push(d.account);
+      if (recentPickAccounts.length > SKIP_SAME_ACCOUNT_WINDOW + 1) {
+        recentPickAccounts.shift();
+      }
+    }
     document.querySelectorAll(".thumb").forEach((el) => {
       el.classList.toggle("selected", Number(el.dataset.i) === i);
     });
@@ -308,11 +338,17 @@
         scannedCount++;
       }
       tickKpis(scannedCount / data.length);
-      // occasionally focus a cell in the detail panel
+      // occasionally focus a cell — prefer a different account than last 2 picks
       if (scannedCount % 28 === 0 || (data[scanIndex - 1] && data[scanIndex - 1].scored)) {
-        const focus = data[scanIndex - 1] && data[scanIndex - 1].scored
-          ? scanIndex - 1
-          : Math.max(0, scanIndex - 1);
+        let focus = Math.max(0, scanIndex - 1);
+        const banned = bannedAccounts();
+        const start = Math.max(0, scanIndex - 7);
+        for (let j = scanIndex - 1; j >= start; j--) {
+          if (data[j] && data[j].scored && !banned.has(data[j].account)) {
+            focus = j;
+            break;
+          }
+        }
         if (!userLocked) select(focus, true);
       }
       // move beam
@@ -343,16 +379,53 @@
     startCycle();
   }
 
+  function bannedAccounts() {
+    // Skip if same account as previous 2 picks (plus current)
+    const banned = new Set(recentPickAccounts.slice(-SKIP_SAME_ACCOUNT_WINDOW));
+    if (data[selected]) banned.add(data[selected].account);
+    return banned;
+  }
+
+  function nextDiverseIndex(indices, fromPos, direction) {
+    if (!indices.length) return selected;
+    const banned = bannedAccounts();
+    const n = indices.length;
+    // Prefer next account different from recent picks (data is round-robin interleaved)
+    for (let step = 1; step <= n; step++) {
+      const idx = indices[(fromPos + direction * step + n * 10) % n];
+      if (!banned.has(data[idx].account)) return idx;
+    }
+    // Fallback: any different account than current
+    const cur = data[selected] && data[selected].account;
+    for (let step = 1; step <= n; step++) {
+      const idx = indices[(fromPos + direction * step + n * 10) % n];
+      if (data[idx].account !== cur) return idx;
+    }
+    return indices[(fromPos + direction + n) % n];
+  }
+
   function nextScoredOrAny() {
     const scoredIdx = data.map((d, i) => (d.scored ? i : -1)).filter((i) => i >= 0);
     const tick = (window.__cycleTick = (window.__cycleTick || 0) + 1);
     if (tick % 4 === 0) {
-      // show a high-view queued card for density
+      // show a high-view queued card for density (also diversify)
       const queuedIdx = data.map((d, i) => (!d.scored ? i : -1)).filter((i) => i >= 0);
-      if (queuedIdx.length) return queuedIdx[tick % Math.min(queuedIdx.length, 80)];
+      if (queuedIdx.length) {
+        const qpos = queuedIdx.indexOf(selected);
+        const from = qpos >= 0 ? qpos : tick % queuedIdx.length;
+        return nextDiverseIndex(queuedIdx, from, 1);
+      }
     }
     const pos = scoredIdx.indexOf(selected);
-    return scoredIdx[(pos + 1) % scoredIdx.length];
+    const from = pos >= 0 ? pos : 0;
+    return nextDiverseIndex(scoredIdx, from, 1);
+  }
+
+  function prevScoredDiverse() {
+    const scoredIdx = data.map((d, i) => (d.scored ? i : -1)).filter((i) => i >= 0);
+    const pos = scoredIdx.indexOf(selected);
+    const from = pos >= 0 ? pos : 0;
+    return nextDiverseIndex(scoredIdx, from, -1);
   }
 
   function startCycle() {
@@ -399,9 +472,7 @@
         e.preventDefault();
         userLocked = true;
         pause();
-        const scoredIdx = data.map((d, i) => (d.scored ? i : -1)).filter((i) => i >= 0);
-        const pos = scoredIdx.indexOf(selected);
-        select(scoredIdx[(pos - 1 + scoredIdx.length) % scoredIdx.length], true);
+        select(prevScoredDiverse(), true);
       }
     });
   }
