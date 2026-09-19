@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>pick the best reel · Reel Score Lab</title>
+  <title>Viral Reel Formats · Reel Score Lab</title>
   <meta name="theme-color" content="#ffffff" />
   <meta name="description" content="Concept demo UI — score Instagram reels with TypeSafe Jev pilot scores. Not affiliated with TypeSafe." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -17,11 +17,11 @@
       <!-- HEADER -->
       <header class="board-header">
         <div class="title-block">
-          <h1>pick the best reel</h1>
+          <h1>Viral Reel Formats</h1>
           <p class="lede">
-            <span id="lede-scored">10</span> reels scored ·
-            <span id="lede-queued">54</span> queued ·
-            every hook, story, CTA, visual &amp; audio
+            <span id="lede-scanned">0</span> / <span id="lede-total">501</span> reels in bank ·
+            <span id="lede-scored">0</span> Jev scored ·
+            <span id="scan-status" class="scan-status">scanning…</span>
           </p>
         </div>
         <div class="kpi-row" id="kpi-row" aria-label="KPIs"></div>
@@ -30,6 +30,7 @@
       <!-- BODY -->
       <div class="board-body">
         <section class="lead-grid-wrap" aria-label="Reel grid">
+          <div class="scan-beam" id="scan-beam" aria-hidden="true"></div>
           <div class="lead-grid" id="lead-grid"></div>
         </section>
 
