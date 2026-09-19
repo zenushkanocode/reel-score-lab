@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pick the best reel · Reel Score Lab</title>
+  <meta name="description" content="Concept demo UI — score Instagram reels with TypeSafe Jev pilot scores. Not affiliated with TypeSafe." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="stage">
+    <div class="board" id="board">
+      <!-- HEADER -->
+      <header class="board-header">
+        <div class="title-block">
+          <h1>pick the best reel</h1>
+          <p class="lede">
+            <span id="lede-scored">10</span> reels scored ·
+            <span id="lede-queued">54</span> queued ·
+            every hook, story, CTA, visual &amp; audio
+          </p>
+        </div>
+        <div class="kpi-row" id="kpi-row" aria-label="KPIs"></div>
+      </header>
+
+      <!-- BODY -->
+      <div class="board-body">
+        <section class="lead-grid-wrap" aria-label="Reel grid">
+          <div class="lead-grid" id="lead-grid"></div>
+        </section>
+
+        <aside class="detail" id="detail" aria-label="Selected reel">
+          <div class="detail-profile" id="detail-profile"></div>
+          <div class="score-block" id="score-block"></div>
+          <div class="chip-row" id="chip-row"></div>
+          <div class="caption-block" id="caption-block"></div>
+        </aside>
+      </div>
+
+      <!-- BOTTOM STRIP -->
+      <footer class="best-strip">
+        <div class="best-label">BEST REELS SELECTED</div>
+        <div class="best-row" id="best-row"></div>
+      </footer>
+    </div>
+
+    <p class="disclaimer">Concept demo UI · scores from TypeSafe Jev pilot · not affiliated with TypeSafe · <a href="https://x.com/zenushkascut" target="_blank" rel="noopener">@zenushkascut</a></p>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
