@@ -4,7 +4,7 @@
 
 powered by Jev · [@zenushkascut](https://x.com/zenushkascut)
 
-> Concept demo UI · scores from TypeSafe Jev pilot · **not affiliated with TypeSafe**.  
+> Concept demo UI · scores from TypeSafe Jev full batch (501/501) · **not affiliated with TypeSafe**.  
 > This is **not** an official TypeSafe product UI.
 
 ## What’s inside
@@ -12,10 +12,9 @@ powered by Jev · [@zenushkascut](https://x.com/zenushkascut)
 Static GitHub Pages site in `docs/`:
 
 - **Full bank wall: 501 Instagram reels** from `reel_bank.csv`
-- **10 real Jev pilot scores** joined from `pilot_scores.csv` (only those URLs — **no invented scores**)
-- **491 queued / scanning** cards for Roman-style batch density (dimmed; views + account only)
-- Real Instagram thumbnails under `docs/thumbs/{shortcode}.jpg` (plus a few labeled placeholders if media 404’d)
-- Scan-wave animation + KPI counters tick up as the batch “processes”
+- **501 real Jev scores** joined from `data/full_scores.csv` (hook · story · CTA · visual · audio · cta_type · framework · visual_style)
+- Real Instagram thumbnails under `docs/thumbs/` (JPG wall + higher-quality PNG screenshots where better)
+- Scan-wave animation + KPI counters tick up from full-batch aggregates
 - Auto-cycles selection after scan completes (pauses on hover / click) for screen recording
 
 ## Enable GitHub Pages
@@ -51,11 +50,10 @@ If OAuth blocks Actions workflows, use **branch + `/docs`** (no `.github/workflo
 ```
 Viral Reel Formats.
 
-I ran a 501-reel bank through a TypeSafe Jev-style batch scan.
-10 reels scored (hook · story · CTA · visual · audio).
-the rest stay queued — no fake numbers.
+I ran a 501-reel bank through TypeSafe Jev.
+501/501 scored (hook · story · CTA · visual · audio).
 
-demo UI by me · scores from the Jev pilot
+demo UI by me · full-batch scores
 not affiliated with TypeSafe
 
 Reel Score Lab → https://zenushkanocode.github.io/reel-score-lab/
@@ -72,9 +70,10 @@ cd docs && python3 -m http.server 8765
 
 ## Data notes
 
-- Scored rows: real Jev fields (`hook_score` … `audio_score`, `cta_type`, `framework_name`, `visual_style`, TypeSafe `share_link`)
-- Unscored rows: labeled **SCAN** / queued — dimmed in the grid; **no invented Jev scores**
-- Thumbnails: `thumb` → `thumbs/{shortcode}.jpg` (IG `/p/{code}/media/?size=l` when available)
+- `docs/data.json` — all 501 rows with real Jev fields (`hook_score` … `audio_score`, `cta_type`, `framework_name`, `visual_style`)
+- `docs/kpis.json` — full-batch aggregates for KPI tiles
+- `data/full_scores.csv` — transparent copy of the 501/501 batch CSV
+- Thumbnails: `thumb` → `thumbs/{shortcode}.jpg` or `.png` (PNG used when higher-quality / correct reel aspect)
 
 ## License
 

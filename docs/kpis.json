@@ -1,10 +1,16 @@
 {
-  "reels_scored": 10,
-  "avg_hook": 1.1,
-  "avg_cta": 0.97,
-  "comment_magnet_pct": 20,
-  "queued": 491,
-  "cost_demo": "~$0.09",
+  "reels_scored": 501,
   "total": 501,
-  "scanned": 501
+  "queued": 0,
+  "scanned": 501,
+  "avg_hook": 0.17,
+  "avg_story": 0.09,
+  "avg_cta": 0.08,
+  "avg_visual": 0.36,
+  "avg_audio": 0.06,
+  "avg_overall_pct": 3.0,
+  "comment_magnets": 6,
+  "comment_magnet_pct": 1,
+  "strong_hooks": 14,
+  "cost_demo": "501/501"
 }
