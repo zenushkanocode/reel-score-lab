@@ -5,7 +5,7 @@
   --muted: #8a8a8a;
   --line: #e6e6e6;
   --line-strong: #d4d4d4;
-  --orange: #ff5a1f;
+  --orange: #ff4d00;
   --orange-deep: #e04a12;
   --black: #0a0a0a;
   --dim: 0.38;
@@ -173,10 +173,12 @@ a { color: inherit; }
 
 .thumb.selected {
   border-color: var(--black);
+  border-width: 2.5px;
   opacity: 1;
   filter: none;
   z-index: 2;
   box-shadow: 0 0 0 1px var(--black);
+  transform: scale(1.02);
 }
 
 .thumb-face {
