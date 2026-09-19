@@ -1,5 +1,7 @@
 (() => {
-  const CYCLE_MS = 2800;
+  const SCAN_STEP_MS = 28;      // how fast the batch-scan advances per cell
+  const DETAIL_HOLD_MS = 2400;  // how long to linger on a highlighted reel
+  const COLS = 28;
   const SCORE_KEYS = [
     { key: "hook_score", label: "Hook" },
     { key: "story_score", label: "Story" },
@@ -9,10 +11,14 @@
   ];
 
   let data = [];
+  let kpis = null;
   let selected = 0;
-  let timer = null;
+  let scanIdx = 0;
+  let scanTimer = null;
+  let detailTimer = null;
   let paused = false;
   let userLocked = false;
+  let mode = "scanning"; // scanning | holding
 
   const $ = (id) => document.getElementById(id);
 
@@ -22,7 +28,6 @@
   }
 
   function barTone(pct, index) {
-    // Roman pattern: black primary bars, orange accents on Story + Visual (or low scores)
     if (index === 1 || index === 3) return "orange";
     if (pct < 35) return "orange";
     return "black";
@@ -36,32 +41,50 @@
     return `<span class="check" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none"><path d="M2.5 6.2L4.8 8.5L9.5 3.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
   }
 
+  function faceBackground(d) {
+    if (d.thumb) {
+      return `url('${d.thumb}'), ${gradientStyle(d.gradient)}`;
+    }
+    return gradientStyle(d.gradient);
+  }
+
   async function load() {
-    const res = await fetch("data.json");
-    data = await res.json();
+    const [dataRes, kpiRes] = await Promise.all([
+      fetch("data.json"),
+      fetch("kpis.json").catch(() => null),
+    ]);
+    data = await dataRes.json();
+    if (kpiRes && kpiRes.ok) {
+      try { kpis = await kpiRes.json(); } catch (_) { kpis = null; }
+    }
     $("lede-scored").textContent = data.filter((d) => d.scored).length;
-    $("lede-queued").textContent = data.filter((d) => !d.scored).length;
+    document.documentElement.style.setProperty("--cols", String(COLS));
     renderKpis();
     renderGrid();
     renderBest();
-    select(0, true);
-    startCycle();
+    // start on a strong reel for first paint
+    const hot = interestingIndices();
+    selected = hot[0] || 0;
+    select(selected, true);
+    startScan();
     wirePause();
   }
 
   function renderKpis() {
     const scored = data.filter((d) => d.scored);
-    const avgHook = scored.reduce((a, d) => a + d.hook_score, 0) / scored.length;
-    const avgCta = scored.reduce((a, d) => a + d.cta_score, 0) / scored.length;
-    const cm = scored.filter((d) => d.cta_type === "comment_magnet").length;
-    const cmPct = Math.round((cm / scored.length) * 100);
+    const n = scored.length || 1;
+    const avgHook = kpis?.avg_hook ?? (scored.reduce((a, d) => a + d.hook_score, 0) / n);
+    const avgCta = kpis?.avg_cta ?? (scored.reduce((a, d) => a + d.cta_score, 0) / n);
+    const avgVisual = kpis?.avg_visual ?? (scored.reduce((a, d) => a + d.visual_score, 0) / n);
+    const cm = kpis?.comment_magnets ?? scored.filter((d) => d.cta_type === "comment_magnet").length;
+    const strong = kpis?.strong_hooks ?? scored.filter((d) => d.hook_score >= 2).length;
     const tiles = [
       { label: "Reels scored", value: String(scored.length), dark: true },
-      { label: "In bank", value: String(data.length), dark: true },
-      { label: "Avg hook", value: avgHook.toFixed(2) },
-      { label: "Avg CTA", value: avgCta.toFixed(2) },
-      { label: "Comment-magnet", value: cmPct + "%" },
-      { label: "Cost / batch", value: "~$0.09", hint: "demo estimate" },
+      { label: "Avg hook", value: Number(avgHook).toFixed(2) },
+      { label: "Avg CTA", value: Number(avgCta).toFixed(2) },
+      { label: "Avg visual", value: Number(avgVisual).toFixed(2) },
+      { label: "Comment magnets", value: String(cm), dark: true },
+      { label: "Strong hooks", value: String(strong), hint: "hook ≥ 2.0" },
     ];
     $("kpi-row").innerHTML = tiles
       .map(
@@ -78,11 +101,18 @@
     const grid = $("lead-grid");
     grid.innerHTML = data
       .map((d, i) => {
-        const tag = d.scored
-          ? `<span class="thumb-tag">JEV</span>`
-          : `<span class="thumb-tag">DEMO</span>`;
-        return `<button type="button" class="thumb ${d.scored ? "scored" : "queued"}${i === selected ? " selected" : ""}" data-i="${i}" aria-label="@${d.account} ${d.views_label}">
-          <div class="thumb-face" style="background:${gradientStyle(d.gradient)}">${d.initial}</div>
+        const hot = d.overall_pct >= 30 || d.cta_type === "comment_magnet" || d.hook_score >= 2;
+        const tag = hot ? `<span class="thumb-tag">HOT</span>` : `<span class="thumb-tag">JEV</span>`;
+        const imgClass = d.thumb ? " has-img" : "";
+        const scoreLabel = d.scored ? `${d.overall_pct}%` : "—";
+        const faceStyle = d.thumb
+          ? `background: center/cover url('${d.thumb}')`
+          : `background: ${gradientStyle(d.gradient)}`;
+        const faceInner = d.thumb
+          ? `<span class="face-score face-score-img">${scoreLabel}</span>`
+          : `<span class="face-initial">${d.initial}</span><span class="face-score">${scoreLabel}</span><span class="face-stripe"></span>`;
+        return `<button type="button" class="thumb scored${hot ? " hot" : ""}${i === selected ? " selected" : ""}" data-i="${i}" data-cta="${d.cta_type || "none"}" aria-label="@${d.account} ${d.views_label}">
+          <div class="thumb-face${imgClass}" style="${faceStyle}">${faceInner}</div>
           <span class="thumb-badge">${d.views_label}</span>
           ${tag}
         </button>`;
@@ -93,36 +123,46 @@
       el.addEventListener("click", () => {
         userLocked = true;
         pause();
+        stopScan();
         select(Number(el.dataset.i), true);
       });
     });
   }
 
+  function interestingIndices() {
+    return data
+      .map((d, i) => ({ i, s: d.overall_pct, h: d.hook_score, cm: d.cta_type === "comment_magnet" ? 1 : 0 }))
+      .filter((x) => x.s >= 20 || x.h >= 2 || x.cm)
+      .sort((a, b) => b.s - a.s || b.h - a.h)
+      .map((x) => x.i);
+  }
+
   function renderBest() {
-    // Prefer unique accounts for the strip (Roman shows distinct faces)
     const scored = data
       .filter((d) => d.scored)
       .slice()
-      .sort((a, b) => b.overall_pct - a.overall_pct);
+      .sort((a, b) => b.overall_pct - a.overall_pct || b.hook_score - a.hook_score);
     const top = [];
     const seen = new Set();
     for (const d of scored) {
       if (seen.has(d.account)) continue;
       seen.add(d.account);
       top.push(d);
-      if (top.length >= 6) break;
+      if (top.length >= 7) break;
     }
-    // fill remaining slots if <6 unique accounts
     for (const d of scored) {
-      if (top.length >= 6) break;
+      if (top.length >= 7) break;
       if (top.includes(d)) continue;
       top.push(d);
     }
     $("best-row").innerHTML = top
       .map((d) => {
         const idx = data.indexOf(d);
+        const bg = d.thumb
+          ? `center/cover url('${d.thumb}')`
+          : gradientStyle(d.gradient);
         return `<div class="best-item" data-i="${idx}">
-          <div class="mini" style="background:${gradientStyle(d.gradient)}">${d.initial}</div>
+          <div class="mini" style="background:${bg}">${d.thumb ? "" : d.initial}</div>
           <div class="score">${d.overall_pct}%</div>
           <div class="name">@${d.account}</div>
         </div>`;
@@ -132,6 +172,7 @@
       el.addEventListener("click", () => {
         userLocked = true;
         pause();
+        stopScan();
         select(Number(el.dataset.i), true);
       });
     });
@@ -141,22 +182,34 @@
     selected = i;
     const d = data[i];
     document.querySelectorAll(".thumb").forEach((el) => {
-      el.classList.toggle("selected", Number(el.dataset.i) === i);
+      const idx = Number(el.dataset.i);
+      el.classList.toggle("selected", idx === i);
     });
     document.querySelectorAll(".best-item").forEach((el) => {
       el.classList.toggle("active", Number(el.dataset.i) === i);
     });
+    // ensure selected thumb is in view if grid ever scrolls
+    const el = document.querySelector(`.thumb[data-i="${i}"]`);
+    if (el) el.scrollIntoView({ block: "nearest", inline: "nearest" });
     renderDetail(d, animateBars);
   }
 
+  function markScannedUpTo(n) {
+    document.querySelectorAll(".thumb").forEach((el) => {
+      const idx = Number(el.dataset.i);
+      el.classList.toggle("scanned", idx <= n);
+      el.classList.toggle("scanning", idx === n);
+    });
+  }
+
   function renderDetail(d, animateBars) {
-    const scoredBadge = d.scored
-      ? `<div class="status-pill"><span class="dot"></span> Jev scored</div>`
-      : `<div class="status-pill queued"><span class="dot"></span> Queued · DEMO</div>`;
+    const avBg = d.thumb
+      ? `center/cover url('${d.thumb}')`
+      : gradientStyle(d.gradient);
 
     $("detail-profile").innerHTML = `
-      <div class="avatar-lg" style="background:${gradientStyle(d.gradient)}">
-        ${d.initial}${d.scored ? checkSvg() : ""}
+      <div class="avatar-lg" style="background:${avBg}">
+        ${d.thumb ? "" : d.initial}${checkSvg()}
       </div>
       <div class="profile-meta">
         <h2>@${d.account}</h2>
@@ -166,18 +219,8 @@
           <span>${d.likes || "—"} likes</span>
           <span>${d.comments || "—"} comments</span>
         </div>
-        ${scoredBadge}
+        <div class="status-pill"><span class="dot"></span> Jev scored · ${d.overall_pct}%</div>
       </div>`;
-
-    if (!d.scored) {
-      $("score-block").innerHTML = `<div class="queued-note">Not yet scored by Jev.<br/>Placeholder card for demo density — no invented scores.</div>`;
-      $("chip-row").innerHTML = `<span class="chip accent">status · queued</span><span class="chip">label · DEMO</span>`;
-      $("caption-block").innerHTML = `
-        <div class="cap-label">Caption</div>
-        <p>${escapeHtml(d.caption || "—")}</p>
-        <div class="detail-links"><a href="${d.reel_url}" target="_blank" rel="noopener">Open reel ↗</a></div>`;
-      return;
-    }
 
     $("score-block").innerHTML = SCORE_KEYS.map((sk, idx) => {
       const pct = scoreToPct(d[sk.key]);
@@ -228,30 +271,73 @@
       .replace(/"/g, "&quot;");
   }
 
-  function nextScoredOrAny() {
-    // Prefer cycling scored items for a livelier score-bar demo; occasionally show queued
-    const scoredIdx = data.map((d, i) => (d.scored ? i : -1)).filter((i) => i >= 0);
-    const tick = (window.__cycleTick = (window.__cycleTick || 0) + 1);
-    if (tick % 5 === 0) {
-      // every 5th: show a queued card
-      const queuedIdx = data.map((d, i) => (!d.scored ? i : -1)).filter((i) => i >= 0);
-      if (queuedIdx.length) return queuedIdx[tick % queuedIdx.length];
-    }
-    const pos = scoredIdx.indexOf(selected);
-    return scoredIdx[(pos + 1) % scoredIdx.length];
-  }
-
-  function startCycle() {
-    stopCycle();
-    timer = setInterval(() => {
+  function startScan() {
+    stopScan();
+    mode = "scanning";
+    const rail = $("scan-rail");
+    if (rail) rail.classList.add("on");
+    scanIdx = Math.max(0, scanIdx);
+    scanTimer = setInterval(() => {
       if (paused || userLocked) return;
-      select(nextScoredOrAny(), true);
-    }, CYCLE_MS);
+      if (mode !== "scanning") return;
+      markScannedUpTo(scanIdx);
+      // every COLS cells (end of a row-ish), peek a detail if interesting
+      if (scanIdx % COLS === Math.floor(COLS / 2)) {
+        const d = data[scanIdx];
+        if (d && (d.overall_pct >= 25 || d.hook_score >= 2 || d.cta_type === "comment_magnet")) {
+          select(scanIdx, true);
+        }
+      }
+      scanIdx += 1;
+      if (scanIdx >= data.length) {
+        // finished a full pass — hold on top formats, then rescan
+        scanIdx = 0;
+        holdOnInteresting();
+      }
+    }, SCAN_STEP_MS);
   }
 
-  function stopCycle() {
-    if (timer) clearInterval(timer);
-    timer = null;
+  function holdOnInteresting() {
+    mode = "holding";
+    const rail = $("scan-rail");
+    if (rail) rail.classList.remove("on");
+    document.querySelectorAll(".thumb").forEach((el) => {
+      el.classList.add("scanned");
+      el.classList.remove("scanning");
+    });
+    const hot = interestingIndices();
+    let hi = 0;
+    const showNext = () => {
+      if (paused || userLocked) return;
+      if (!hot.length) {
+        mode = "scanning";
+        if (rail) rail.classList.add("on");
+        return;
+      }
+      select(hot[hi % hot.length], true);
+      hi += 1;
+      if (hi >= Math.min(hot.length, 6)) {
+        // back to scanning
+        clearTimeout(detailTimer);
+        detailTimer = setTimeout(() => {
+          mode = "scanning";
+          if (rail) rail.classList.add("on");
+        }, DETAIL_HOLD_MS);
+        return;
+      }
+      clearTimeout(detailTimer);
+      detailTimer = setTimeout(showNext, DETAIL_HOLD_MS);
+    };
+    showNext();
+  }
+
+  function stopScan() {
+    if (scanTimer) clearInterval(scanTimer);
+    scanTimer = null;
+    if (detailTimer) clearTimeout(detailTimer);
+    detailTimer = null;
+    const rail = $("scan-rail");
+    if (rail) rail.classList.remove("on");
   }
 
   function pause() {
@@ -265,32 +351,36 @@
     const board = $("board");
     board.addEventListener("mouseenter", pause);
     board.addEventListener("mouseleave", () => {
-      // resume auto-cycle after leave unless user clicked
       if (userLocked) {
-        // unlock after leave so recording can continue cycling
         setTimeout(() => {
           userLocked = false;
           paused = false;
-        }, 1200);
+          if (!scanTimer) startScan();
+        }, 1400);
       } else {
         resume();
+        if (!scanTimer) startScan();
       }
     });
-    // keyboard
     document.addEventListener("keydown", (e) => {
+      const hot = interestingIndices();
       if (e.key === "ArrowRight" || e.key === " ") {
         e.preventDefault();
         userLocked = true;
         pause();
-        select(nextScoredOrAny(), true);
+        stopScan();
+        const pos = hot.indexOf(selected);
+        const next = hot[(pos + 1) % hot.length] ?? ((selected + 1) % data.length);
+        select(next, true);
       }
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         userLocked = true;
         pause();
-        const scoredIdx = data.map((d, i) => (d.scored ? i : -1)).filter((i) => i >= 0);
-        const pos = scoredIdx.indexOf(selected);
-        select(scoredIdx[(pos - 1 + scoredIdx.length) % scoredIdx.length], true);
+        stopScan();
+        const pos = hot.indexOf(selected);
+        const prev = hot[(pos - 1 + hot.length) % hot.length] ?? ((selected - 1 + data.length) % data.length);
+        select(prev, true);
       }
     });
   }
