@@ -38,6 +38,7 @@ a { color: inherit; }
 }
 
 .board {
+  position: relative;
   background: var(--board);
   border-radius: var(--radius-board);
   box-shadow:
@@ -146,7 +147,7 @@ a { color: inherit; }
 .lead-grid {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  gap: 5px;
+  gap: 4px;
   height: 100%;
   align-content: start;
 }
